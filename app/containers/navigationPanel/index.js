@@ -154,10 +154,21 @@ class NavigationPanel extends Component {
   renderAllTagsForPin () {
     const { gistTags, activeGistTag } = this.props
     const { tmpPinnedTags } = this.state
+
+    const langTags = []
+    const customTags = []
+
+    Object.keys(gistTags).sort().forEach(item => {
+      item.startsWith('lang@')
+        ? langTags.push(item)
+        : customTags.push(item)
+    })
+    const orderedGistTags = [...customTags, ...langTags]
+
     const tagsForPinRows = []
     let i = 1
     let row = []
-    Object.keys(gistTags).forEach(tag => {
+    orderedGistTags.forEach(tag => {
       row.push(
           <td key={ tag }>
             <a
