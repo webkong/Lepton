@@ -112,17 +112,17 @@ class NavigationPanel extends Component {
   renderTagSection () {
     return (
       <div className='gist-tag-section'>
+        <div className='lang-tag-section-scroll'>
+          <div className='lang-tag-section-content'>
+            { this.renderLangTags() }
+          </div>
+        </div>
+        <hr/>
         <div className='pinned-tag-section-scroll'>
           <div className='pinned-tag-section-content'>
             { this.renderPinnedTags() }
           </div>
           <a className='configure-tag' onClick={ this.handleConfigurePinnedTagClicked.bind(this) }>shortcuts...</a>
-        </div>
-        <hr className='configure-tag-line' />
-        <div className='lang-tag-section-scroll'>
-          <div className='lang-tag-section-content'>
-            { this.renderLangTags() }
-          </div>
         </div>
         <hr/>
         <div className='custom-tag-section-scroll'>
