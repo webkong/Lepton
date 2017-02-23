@@ -49,6 +49,7 @@ import {
   updateUpdateAvailableBarStatus,
   updateNewVersionInfo,
   updateImmersiveModeStatus,
+  updatePreferenceModalStatus,
   updatePinnedTags
 } from './actions/index'
 
@@ -470,6 +471,33 @@ ipcRenderer.on('search-gist', data => {
   }
 })
 
+ipcRenderer.on('local-preference', data => {
+  const state = reduxStore.getState()
+  const {
+      immersiveMode,
+      gistRawModal,
+      searchWindowStatus,
+      preferenceModalStatus,
+      gistEditModalStatus,
+      gistNewModalStatus,
+      gistDeleteModalStatus,
+      logoutModalStatus } = state
+
+  const dialogs = [
+    immersiveMode,
+    gistRawModal.status,
+    gistEditModalStatus,
+    searchWindowStatus,
+    gistNewModalStatus,
+    gistDeleteModalStatus,
+    logoutModalStatus ]
+  if (allDialogsClosed(dialogs)) {
+    const preStatus = preferenceModalStatus
+    const newStatus = preStatus === 'ON' ? 'OFF' : 'ON'
+    reduxStore.dispatch(updatePreferenceModalStatus(newStatus))
+  }
+})
+
 ipcRenderer.on('new-gist', data => {
   const state = reduxStore.getState()
   const {
@@ -537,7 +565,7 @@ ipcRenderer.on('immersive-mode', data => {
   }
 })
 
-ipcRenderer.on('exit-immersive-mode', data => {
+ipcRenderer.on('back-to-normal-mode', data => {
   const state = reduxStore.getState()
   const { gistRawModal, gistEditModalStatus } = state
 
@@ -545,6 +573,7 @@ ipcRenderer.on('exit-immersive-mode', data => {
   if (allDialogsClosed(dialogs)) {
     reduxStore.dispatch(updateImmersiveModeStatus('OFF'))
   }
+  reduxStore.dispatch(updatePreferenceModalStatus('OFF'))
 })
 
 ipcRenderer.on('update-available', payload => {
