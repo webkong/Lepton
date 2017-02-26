@@ -148,6 +148,12 @@
   }
 }
 
+/* This is a global setting affecting all dialogs */
+.modal {
+  -webkit-app-region: drag;
+  background: rgba(0, 0, 0, 0.5);
+}
+
 .edit-modal {
   width: 90vw;
 }
@@ -585,6 +591,8 @@
    }
 
   img {
-   max-width: 100%;
+    max-width: 80%;
+    display: block;
+    margin: 0 auto;
   }
 }

@@ -296,6 +296,7 @@ class Snippet extends Component {
       <Modal
         bsSize='large'
         dialogClassName='edit-modal'
+        animation={ false }
         backdrop={ false }
         show={ this.props.gistEditModalStatus === 'ON' }
         onHide={ this.closeGistEditorModal.bind(this)}>

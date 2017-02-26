@@ -454,14 +454,17 @@ ipcRenderer.on('search-gist', data => {
       searchWindowStatus,
       gistEditModalStatus,
       gistNewModalStatus,
+      preferenceModalStatus,
       gistDeleteModalStatus,
       logoutModalStatus } = state
 
+  // FIXME: This should be able to extracted to the allDialogsClosed method.
   const dialogs = [
     immersiveMode,
     gistRawModal.status,
     gistEditModalStatus,
     gistNewModalStatus,
+    preferenceModalStatus,
     gistDeleteModalStatus,
     logoutModalStatus ]
   if (allDialogsClosed(dialogs)) {
@@ -483,6 +486,7 @@ ipcRenderer.on('local-preference', data => {
       gistDeleteModalStatus,
       logoutModalStatus } = state
 
+  // FIXME: This should be able to extracted to the allDialogsClosed method.
   const dialogs = [
     immersiveMode,
     gistRawModal.status,
@@ -490,6 +494,7 @@ ipcRenderer.on('local-preference', data => {
     searchWindowStatus,
     gistNewModalStatus,
     gistDeleteModalStatus,
+    preferenceModalStatus,
     logoutModalStatus ]
   if (allDialogsClosed(dialogs)) {
     const preStatus = preferenceModalStatus
@@ -504,14 +509,19 @@ ipcRenderer.on('new-gist', data => {
       immersiveMode,
       gistRawModal,
       searchWindowStatus,
+      preferenceModalStatus,
+      gistNewModalStatus,
       gistEditModalStatus,
       gistDeleteModalStatus,
       logoutModalStatus } = state
 
+  // FIXME: This should be able to extracted to the allDialogsClosed method.
   const dialogs = [
     immersiveMode,
     gistRawModal.status,
     searchWindowStatus,
+    preferenceModalStatus,
+    gistNewModalStatus,
     gistEditModalStatus,
     gistDeleteModalStatus,
     logoutModalStatus ]
@@ -525,14 +535,19 @@ ipcRenderer.on('edit-gist', data => {
   const {
       gistRawModal,
       searchWindowStatus,
+      preferenceModalStatus,
       gistNewModalStatus,
+      gistEditModalStatus,
       gistDeleteModalStatus,
       logoutModalStatus } = state
 
+  // FIXME: This should be able to extracted to the allDialogsClosed method.
   const dialogs = [
     gistRawModal.status,
     gistNewModalStatus,
+    gistEditModalStatus,
     searchWindowStatus,
+    preferenceModalStatus,
     gistDeleteModalStatus,
     logoutModalStatus ]
   if (allDialogsClosed(dialogs)) {
@@ -544,6 +559,7 @@ ipcRenderer.on('immersive-mode', data => {
   const state = reduxStore.getState()
   const {
       searchWindowStatus,
+      preferenceModalStatus,
       immersiveMode,
       gistRawModal,
       gistEditModalStatus,
@@ -553,6 +569,7 @@ ipcRenderer.on('immersive-mode', data => {
 
   const dialogs = [
     searchWindowStatus,
+    preferenceModalStatus,
     gistRawModal.status,
     gistEditModalStatus,
     gistNewModalStatus,

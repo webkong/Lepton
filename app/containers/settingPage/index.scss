@@ -7,7 +7,7 @@
   }
 
   .section-base {
-    height: 72vh;
+    height: 73vh;
   }
 
   .general-section {
@@ -22,12 +22,6 @@
     @extend .font-style-base;
     font-size: 12px;
     text-align: center;
-  }
-
-  .modal {
-    -webkit-user-select: none;
-    -webkit-app-region: drag;
-    background: rgba(0, 0, 0, 0.5);
   }
 
   .logo {
@@ -45,7 +39,8 @@
 
   .license-section {
     overflow: auto;
-    height: 30%;
+    max-height: 28%;
+    margin-bottom: 20px;
     border-radius: 5px;
     padding: 0 20px;
     border: solid 1px rgb(200,200,200);
@@ -73,7 +68,7 @@
   }
 
   .modal-sm {
-    width: 350px;
+    width: 375px;
   }
 
   .logo-sub {
