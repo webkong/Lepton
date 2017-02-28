@@ -7,7 +7,7 @@
   }
 
   .section-base {
-    height: 73vh;
+    height: 75vh;
   }
 
   .general-section {
@@ -39,7 +39,7 @@
 
   .license-section {
     overflow: auto;
-    max-height: 28%;
+    height: 28vh;
     margin-bottom: 20px;
     border-radius: 5px;
     padding: 0 20px;
@@ -83,4 +83,10 @@
   hr {
     margin-bottom: 5px;
   }
+}
+
+/* This is a global setting affecting all dialogs */
+.modal {
+  -webkit-app-region: drag;
+  background: rgba(0, 0, 0, 0.5);
 }

@@ -148,12 +148,6 @@
   }
 }
 
-/* This is a global setting affecting all dialogs */
-.modal {
-  -webkit-app-region: drag;
-  background: rgba(0, 0, 0, 0.5);
-}
-
 .edit-modal {
   width: 90vw;
 }

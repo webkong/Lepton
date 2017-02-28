@@ -2,34 +2,13 @@
 
 import React, { Component } from 'react'
 import { connect } from 'react-redux'
-import { Modal, Nav, NavItem, Image } from 'react-bootstrap'
-import { bindActionCreators } from 'redux'
-import {
-    updatePreferenceModalStatus} from '../../actions'
-
-import Store from '../../utilities/store'
+import { Modal, Image } from 'react-bootstrap'
 import LicenseInfo from '../../../license.json'
 import logoImage from './logo.png'
-import { remote } from 'electron'
 import appInfo from '../../../package.json'
 import './index.scss'
 
-const logger = remote.getGlobal('logger')
-
 class SettingPage extends Component {
-  constructor (props) {
-    super(props)
-
-    this.state = {
-      activeTab: 'General'
-    }
-  }
-
-  handleTabSelect(eventKey) {
-    this.setState({
-      activeTab: eventKey
-    })
-  }
 
   renderAboutSection () {
     const licenseList = []
@@ -64,61 +43,30 @@ class SettingPage extends Component {
           <div className='contributor'><a href='https://github.com/rogersachan'>rogersachan</a></div>
         </div>
         <hr/>
-        <div className='setting-title'>Acknowledgement</div>
-        <div className='license-section'>
-          { licenseList }
+        <div>
+          <div className='setting-title'>Acknowledgement</div>
+          <div className='license-section'>
+            { licenseList }
+          </div>
         </div>
       </div>
     )
-  }
-
-  renderGeneralSection () {
-    return (
-      <div className='general-section'>
-        General Section
-      </div>
-    )
-  }
-
-  renderTabSection () {
-    const { activeTab } = this.state
-    switch (activeTab) {
-      case 'General':
-        return this.renderGeneralSection()
-      case 'About':
-        return this.renderAboutSection()
-      default:
-    }
-    return null
   }
 
   renderSettingModalBody () {
-    const { activeTab } = this.state
     return (
         <div>
-          <Nav bsStyle='tabs' activeKey={ activeTab } onSelect={ this.handleTabSelect.bind(this) }>
-            <NavItem eventKey='General'>General</NavItem>
-            <NavItem eventKey='About'>About</NavItem>
-          </Nav>
-          <div>
-            { this.renderTabSection() }
-          </div>
+          { this.renderAboutSection() }
         </div>
     )
   }
 
-  close () {
-    const { updatePreferenceModalStatus } = this.props
-    updatePreferenceModalStatus('OFF')
-  }
-
   render () {
-    const { preferenceModalStatus } = this.props
     return (
       <div className='preference-modal'>
         <Modal.Dialog bsSize='small'>
           <Modal.Header>
-            <Modal.Title>Settings</Modal.Title>
+            <Modal.Title>About</Modal.Title>
           </Modal.Header>
           <Modal.Body>
             { this.renderSettingModalBody() }
@@ -131,20 +79,8 @@ class SettingPage extends Component {
 
 function mapStateToProps (state) {
   return {
-    // searchWindowStatus: state.authWindowStatus,
-    // userSessionStatus: state.userSession.activeStatus,
     preferenceModalStatus: state.preferenceModalStatus
   }
 }
 
-function mapDispatchToProps (dispatch) {
-  return bindActionCreators({
-    // selectGistTag: selectGistTag,
-    // selectGist: selectGist,
-    // fetchSingleGist: fetchSingleGist,
-    // updateSearchWindowStatus: updateSearchWindowStatus,
-    updatePreferenceModalStatus: updatePreferenceModalStatus
-  }, dispatch)
-}
-
-export default connect(mapStateToProps, mapDispatchToProps)(SettingPage)
+export default connect(mapStateToProps)(SettingPage)

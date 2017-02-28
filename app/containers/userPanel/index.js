@@ -163,8 +163,8 @@ class UserPanel extends Component {
       <Modal
         bsSize='large'
         dialogClassName='new-modal'
-        animation={ false } 
-        backdrop={ false }
+        animation={ false }
+        backdrop='static'
         show={ this.props.gistNewModalStatus === 'ON' }
         onHide={ this.closeGistEditorModal.bind(this)}>
         <Modal.Header closeButton>

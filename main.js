@@ -150,7 +150,7 @@ function setUpApplicationMenu () {
         }
       },
       {
-        label: 'Setting',
+        label: 'About',
         accelerator: keyPreference,
         click: (item, mainWindow) => {
           mainWindow && mainWindow.send('local-preference')
