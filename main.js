@@ -1,5 +1,6 @@
 'use strict'
 
+const os = require('os')
 const electron = require('electron')
 const nconf = require('nconf')
 const windowStateKeeper = require('electron-window-state')
@@ -8,6 +9,7 @@ const Menu = electron.Menu
 const app = electron.app
 const ipcMain = electron.ipcMain
 const BrowserWindow = electron.BrowserWindow
+let willQuitApp = false
 
 // http://electron.rocks/sharing-between-main-and-renderer-process/
 // Set up the logger
@@ -20,30 +22,36 @@ const appInfo = require('./package.json')
 
 const autoUpdater = require('electron-updater').autoUpdater
 autoUpdater.logger = logger
-autoUpdater.autoDownload = false
+autoUpdater.autoDownload = true
 
 initGlobalConfigs()
 initGlobalLogger()
 
-logger.info(`\n\n----- ${appInfo.name} v${appInfo.version} -----\n`)
+logger.info(`\n\n----- ${appInfo.name} v${appInfo.version} ${os.platform()}-----\n`)
+
+logger.info(`[conf] Looking for .leptonrc at ${ app.getPath('home') + '/.leptonrc' }`)
+logger.info('[conf] The resolved configuration is ...')
+for (const key of Object.getOwnPropertyNames(defaultConfig)) {
+  logger.info(`"${key}": ${JSON.stringify(nconf.get(key))}`)    
+}
 
 let mainWindow = null
 
 const keyShortcutForSearch = 'Shift+Space'
 const keyNewGist = 'CommandOrControl+N'
 const keyEditGist = 'CommandOrControl+E'
+const keySubmitGist = 'CommandOrControl+S'
 const keyImmersiveMode = 'CommandOrControl+I'
 const keyAboutPage = 'CommandOrControl+,'
-const keyUp = 'Shift+Up'
-const keyDown = 'Shift+Down'
-const keyEnter = 'Shift+Enter'
+const keyDashboard = 'CommandOrControl+D'
+const keyEditorExit = 'CommandOrControl+Escape'
+const keySyncGists = 'CommandOrControl+R'
 
 function createWindowAndAutoLogin () {
   createWindow(true)
 }
 
 function createWindow (autoLogin) {
-  let newLaunch = true;
   console.time('init')
     // Load the previous state with fallback to defaults
   let mainWindowState = windowStateKeeper({
@@ -60,17 +68,17 @@ function createWindow (autoLogin) {
     minHeight: 700,
     // titleBarStyle: 'hidden',
     backgroundColor: '#808080',
-    show: false
+    show: false,
+    icon: path.join(__dirname, '/icon/icon.png')
   })
 
   if (autoLogin) {
     logger.debug('-----> registering login-page-ready listener')
+    // Set up a one-time listener for 'login-page-ready'
     ipcMain.on('login-page-ready', () => {
-      if (newLaunch) {
-        logger.info('[signal] sending auto-login signal')        
-        mainWindow.webContents.send('auto-login')
-        newLaunch = false
-      }
+      logger.info('[signal] sending auto-login signal')        
+      mainWindow.webContents.send('auto-login')
+      ipcMain.removeAllListeners('login-page-ready')
     })
   }
 
@@ -79,7 +87,7 @@ function createWindow (autoLogin) {
   // and restore the maximized or full screen state
   mainWindowState.manage(mainWindow);
 
-  mainWindow.webContents.on('will-navigate', function(e, url) {
+  mainWindow.webContents.on('will-navigate', (e, url) => {
     e.preventDefault()
     electron.shell.openExternal(url)
   })
@@ -87,35 +95,33 @@ function createWindow (autoLogin) {
   mainWindow.once('ready-to-show', () => {
     mainWindow.show()
     console.timeEnd('init')
-    electronLocalshortcut.register(mainWindow, keyUp, () => {
-    //   console.log('You pressed ' + keyUp)
-      mainWindow && mainWindow.webContents.send('key-up')
-    })
-    electronLocalshortcut.register(mainWindow, keyDown, () => {
-    //   console.log('You pressed ' + keyDown)
-      mainWindow && mainWindow.webContents.send('key-down')
-    })
-    electronLocalshortcut.register(mainWindow, keyEnter, () => {
-    //   console.log('You pressed ' + keyEnter)
-      mainWindow && mainWindow.webContents.send('key-enter')
-    })
-    autoUpdater.on('error', data => {
-      logger.debug('[autoUpdater] error ' + JSON.stringify(data))
-    })
-    autoUpdater.on('update-not-available', () => {
-      logger.debug('[autoUpdater] update-not-available')
-    })
-    autoUpdater.on('update-available', (info) => {
-      logger.debug('[autoUpdater] update-available. ' + mainWindow)
-      global.newVersionInfo = info
-      mainWindow && mainWindow.webContents.send('update-available')
-    })
+    // autoUpdater.on('error', data => {
+    //   logger.debug('[autoUpdater] error ' + JSON.stringify(data))
+    // })
+    // autoUpdater.on('update-not-available', () => {
+    //   logger.debug('[autoUpdater] update-not-available')
+    // })
+    // autoUpdater.on('update-available', (info) => {
+    //   logger.debug('[autoUpdater] update-available. ' + mainWindow)
+    //   global.newVersionInfo = info
+    //   mainWindow && mainWindow.webContents.send('update-available')
+    // })
 
     // Only run auto update checker in production.
-    if (!isDev && !appInfo.version.includes('alpha')) {
-        autoUpdater.checkForUpdates()
-    }
+    // if (!isDev && !appInfo.version.includes('alpha')) {
+    //     autoUpdater.checkForUpdates()
+    // }
   })
+
+  mainWindow.on('close', (e) => {
+    if (os.platform() === 'darwin' && !willQuitApp) {
+      // Hide the window when users close the window on macOS
+      e.preventDefault()
+      mainWindow.hide()
+    } else {
+      mainWindow = null
+    }
+  });
 
   const ContextMenu = require('electron-context-menu')
   ContextMenu({
@@ -129,34 +135,37 @@ function createWindow (autoLogin) {
   global.mainWindow = mainWindow
 }
 
-app.on('ready', function() {
+app.on('ready', () => {
     // createWindow()
+    autoUpdater.checkForUpdatesAndNotify()
     createWindowAndAutoLogin()
 })
 
-app.on('window-all-closed', function() {
+app.on('window-all-closed', () => {
   logger.info('The app window is closed')
   if (process.platform !== 'darwin') app.quit()
   mainWindow = null
 })
 
-app.on('before-quit', function() {
-  // If we launch the app and close it quickly, we might run into a 
-  // situation where electronLocalshortcut is not initialized.
-  if (mainWindow && electronLocalshortcut) {
-    electronLocalshortcut.unregisterAll(mainWindow)
+
+/* 'before-quit' is emitted when Electron receives 
+ * the signal to exit and wants to start closing windows */
+app.on('before-quit', () => {
+  willQuitApp = true
+  try {
+    // If we launch the app and close it quickly, we might run into a 
+    // situation where electronLocalshortcut is not initialized.
+    if (mainWindow && electronLocalshortcut) {
+      electronLocalshortcut.unregisterAll(mainWindow)
+    }
+  } catch (e) {
+    logger.error(e)
   }
 })
 
-// 'activate' is a macOS specific signal mapped to 
-// 'applicationShouldHandleReopen' event
-app.on('activate', (event, hasVisibleWindows) => {
-  // On macOS, if an app is not fully closed, it is expected to open again
-  // when the icon is clicked.
-  if (mainWindow === null && !hasVisibleWindows && app.isReady()) {
-    createWindowAndAutoLogin()
-  }
-})
+// 'activate' is emitted when the user clicks the Dock icon (OS X).
+// It is a macOS specific signal mapped to 'applicationShouldHandleReopen' event
+app.on('activate', () => mainWindow && mainWindow.show())
 
 function setUpApplicationMenu () {
   // Create the Application's main menu
@@ -175,9 +184,19 @@ function setUpApplicationMenu () {
         click: (item, mainWindow) => mainWindow && mainWindow.send('edit-gist')
       },
       {
-        label: 'Search Gist',
-        accelerator: keyShortcutForSearch,
-        click: (item, mainWindow) => mainWindow && mainWindow.send('search-gist')
+        label: 'Submit Gist',
+        accelerator: keySubmitGist,
+        click: (item, mainWindow) => mainWindow && mainWindow.send('submit-gist')
+      },
+      {
+        label: 'Sync Gist',
+        accelerator: keySyncGists,
+        click: (item, mainWindow) => mainWindow && mainWindow.send('sync-gists')
+      },
+      {
+        label: 'Exit Editor',
+        accelerator: keyEditorExit,
+        click: (item, mainWindow) => mainWindow && mainWindow.send('exit-editor')
       },
       {
         label: 'Immersive Mode',
@@ -187,16 +206,22 @@ function setUpApplicationMenu () {
       {
         label: 'Back to Normal Mode',
         accelerator: 'Escape',
-        click: (item, mainWindow) => {
-          mainWindow && mainWindow.send('back-to-normal-mode')
-        }
+        click: (item, mainWindow) => mainWindow && mainWindow.send('back-to-normal-mode')
+      },
+      {
+        label: 'Dashboard',
+        accelerator: keyDashboard,
+        click: (item, mainWindow) => mainWindow && mainWindow.send('dashboard')
       },
       {
         label: 'About',
         accelerator: keyAboutPage,
-        click: (item, mainWindow) => {
-          mainWindow && mainWindow.send('about-page')
-        }
+        click: (item, mainWindow) => mainWindow && mainWindow.send('about-page')
+      },
+      {    
+        label: 'Search',
+        accelerator: keyShortcutForSearch,
+        click: (item, mainWindow) => mainWindow && mainWindow.send('search-gist')
       }
     ]
   }
@@ -207,6 +232,7 @@ function setUpApplicationMenu () {
 
 function initGlobalConfigs () {
   const configFilePath = app.getPath('home') + '/.leptonrc'
+  logger.info(`[conf] Looking for .leptonrc at ${configFilePath}`)
   nconf.argv().env()
   try {
     nconf.file({ file: configFilePath })
@@ -214,8 +240,7 @@ function initGlobalConfigs () {
     logger.error('[.leptonrc] Please correct the mistakes in your configuration file: [%s].\n' + error, configFilePath)
   }
 
-  nconf.defaults(defaultConfig)
-
+  nconf.defaults(defaultConfig)  
   global.conf = nconf
 }
 

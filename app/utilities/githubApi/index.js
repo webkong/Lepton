@@ -8,16 +8,23 @@ import ProxyAgent from 'proxy-agent'
 import { remote } from 'electron'
 
 const TAG = '[REST] '
-const kTimeoutUnit = 5 * 1000 // ms
+const kTimeoutUnit = 10 * 1000 // ms
 const logger = remote.getGlobal('logger')
 const conf = remote.getGlobal('conf')
 const userAgent = 'hackjutsu-lepton-app'
+let gitHubHostApi = 'api.github.com'
 
 let proxyAgent = null
-if (conf && conf.get('proxy:enable')) {
-  const proxyUri = conf.get('proxy:address')
-  proxyAgent = new ProxyAgent(proxyUri)
-  logger.info('[.leptonrc] Use proxy', proxyUri)
+if (conf) {
+  if (conf.get('proxy:enable')) {
+    const proxyUri = conf.get('proxy:address')
+    proxyAgent = new ProxyAgent(proxyUri)
+    logger.info('[.leptonrc] Use proxy', proxyUri)
+  }
+  if (conf.get('enterprise:enable')) {
+    const gitHubHost = conf.get('enterprise:host')
+    gitHubHostApi = `${gitHubHost}/api/v3`
+  }
 }
 
 function exchangeAccessToken (clientId, clientSecret, authCode) {
@@ -38,7 +45,7 @@ function exchangeAccessToken (clientId, clientSecret, authCode) {
 
 function getUserProfile (token) {
   logger.debug(TAG + 'Getting user profile with token ' + token)
-  const USER_PROFILE_URI = 'https://api.github.com/user'
+  const USER_PROFILE_URI = `https://${gitHubHostApi}/user`
   return ReqPromise({
     uri: USER_PROFILE_URI,
     agent: proxyAgent,
@@ -56,7 +63,7 @@ function getUserProfile (token) {
 
 function getSingleGist (token, gistId) {
   logger.debug(TAG + `Getting single gist ${gistId} with token ${token}`)
-  const SINGLE_GIST_URI = 'https://api.github.com/gists/'
+  const SINGLE_GIST_URI = `https://${gitHubHostApi}/gists/`
   return ReqPromise({
     uri: SINGLE_GIST_URI + gistId,
     agent: proxyAgent,
@@ -76,11 +83,11 @@ function getAllGistsV2 (token, userId) {
   logger.debug(TAG + `[V2] Getting all gists of ${userId} with token ${token}`)
   const gistList = []
   return requestGists(token, userId, 1, gistList)
-    .then((res) => {
+    .then(res => {
       if (!res.headers['link']) {
         logger.debug(TAG + '[V2] The header missing link property')
         logger.debug(TAG + JSON.stringify(res.headers))
-        logger.debug(TAG + `The length of gistLis is ${gistList.length}`)
+        logger.debug(TAG + `The length of gistList is ${gistList.length}`)
 
         // Falling back to getAllGistsV1 to deal with two-factor Authenticated clients
         logger.debug(TAG + `[V2] Falling back to [V1]...`)
@@ -93,12 +100,14 @@ function getAllGistsV2 (token, userId) {
 
       const requests = []
       for (let i = 2; i <= maxPage; ++i) { requests.push(requestGists(token, userId, i, gistList)) }
-
       return Promise.all(requests)
+        .then(() => {
+          return gistList.sort((g1, g2) => g2.updated_at.localeCompare(g1.updated_at))
+        })
     })
-    .then(() => {
-      gistList.sort((g1, g2) => g2.last_updated_at - g1.last_updated_at)
-      return gistList
+    .catch(err => {
+      logger.debug(TAG + `[V2] Something wrong happens ${err}. Falling back to [V1]...`)
+      return getAllGistsV1(token, userId)
     })
 }
 
@@ -106,9 +115,9 @@ function requestGists (token, userId, page, gistList) {
   logger.debug(TAG + '[V2] Requesting gists with page ' + page)
   return ReqPromise(makeOptionForGetAllGists(token, userId, page))
     .catch(err => {
-      logger.err(err)
+      logger.error(err)
     })
-    .then((res) => {
+    .then(res => {
       parseBody(res.body, gistList)
       return res
     })
@@ -122,7 +131,7 @@ const EMPTY_PAGE_ERROR_MESSAGE = 'page empty (Not an error)'
 function getAllGistsV1 (token, userId) {
   logger.debug(TAG + `[V1] Getting all gists of ${userId} with token ${token}`)
   let gistList = []
-  return new Promise(function (resolve, reject) {
+  return new Promise((resolve, reject) => {
     const maxPageNumber = 100
     let funcs = Promise.resolve(
       makeRangeArr(1, maxPageNumber).map(
@@ -132,7 +141,7 @@ function getAllGistsV1 (token, userId) {
       .catch(err => {
         if (err !== EMPTY_PAGE_ERROR_MESSAGE) {
           logger.error(err)
-          Notifier('Sync failed', 'Please check your network condition.')
+          Notifier('Sync failed', 'Please check your network condition. 05')
         }
       })
       .finally(() => {
@@ -145,9 +154,9 @@ function getAllGistsV1 (token, userId) {
   }
 
   function makeRequestForGetAllGists (option) {
-    return function () {
-      return new Promise(function (resolve, reject) {
-        Request(option, function (error, response, body) {
+    return () => {
+      return new Promise((resolve, reject) => {
+        Request(option, (error, response, body) => {
           logger.debug('The gist number on this page is ' + body.length)
           if (error) {
             reject(error)
@@ -176,7 +185,7 @@ function makeRangeArr (start, end) {
 const GISTS_PER_PAGE = 100
 function makeOptionForGetAllGists (token, userId, page) {
   return {
-    uri: 'https://api.github.com/users/' + userId + '/gists',
+    uri: `https://${gitHubHostApi}/users/${userId}/gists`,
     agent: proxyAgent,
     headers: {
       'User-Agent': userAgent,
@@ -200,7 +209,7 @@ function createSingleGist (token, description, files, isPublic) {
       'User-Agent': userAgent,
     },
     method: 'POST',
-    uri: 'https://api.github.com/gists',
+    uri: `https://${gitHubHostApi}/gists`,
     agent: proxyAgent,
     qs: {
       access_token: token
@@ -222,7 +231,7 @@ function editSingleGist (token, gistId, updatedDescription, updatedFiles) {
       'User-Agent': userAgent,
     },
     method: 'PATCH',
-    uri: 'https://api.github.com/gists/' + gistId,
+    uri: `https://${gitHubHostApi}/gists/${gistId}`,
     agent: proxyAgent,
     qs: {
       access_token: token
@@ -243,7 +252,7 @@ function deleteSingleGist (token, gistId) {
       'User-Agent': userAgent,
     },
     method: 'DELETE',
-    uri: 'https://api.github.com/gists/' + gistId,
+    uri: `https://${gitHubHostApi}/gists/${gistId}`,
     agent: proxyAgent,
     qs: {
       access_token: token

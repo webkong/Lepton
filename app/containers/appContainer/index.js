@@ -13,15 +13,23 @@ import LoginPage from '../loginPage'
 import SnippetPanel from '../snippetPanel'
 import SearchPage from '../searchPage'
 import AboutPage from '../aboutPage'
+import Dashboard from '../dashboard'
 import { updateUpdateAvailableBarStatus } from '../../actions/index'
 
 import './index.scss'
 
 class AppContainer extends Component {
   renderAboutPage () {
-    const { aboutModalStatus, updateAboutModalStatus } = this.props
+    const { updateAboutModalStatus } = this.props
     return (
       <AboutPage updateAboutModalStatus = { updateAboutModalStatus }/>
+    )
+  }
+
+  renderDashboard () {
+    const { updateDashboardStatus } = this.props
+    return (
+      <Dashboard updateDashboardStatus = { updateDashboardStatus }/>
     )
   }
 
@@ -89,6 +97,7 @@ class AppContainer extends Component {
     return (
       <div>
         { this.renderAboutPage() }
+        { this.renderDashboard() }
         { this.renderSearchPage() }
         { this.renderUpdateAlert() }
         <NavigationPanel
@@ -153,6 +162,7 @@ function mapStateToProps (state) {
     userSession: state.userSession,
     searchWindowStatus: state.searchWindowStatus,
     aboutModalStatus: state.aboutModalStatus,
+    dashboardModalStatus: state.dashboardModalStatus,
     newVersionInfo: state.newVersionInfo,
     updateAvailableBarStatus: state.updateAvailableBarStatus,
     immersiveMode: state.immersiveMode

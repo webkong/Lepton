@@ -5,8 +5,7 @@ import { connect } from 'react-redux'
 import { bindActionCreators } from 'redux'
 import { Panel, Modal, Button, ProgressBar, Collapse } from 'react-bootstrap'
 import { default as GistEditorForm, UPDATE_GIST } from '../gistEditorForm'
-import HighlightJS from 'highlight.js'
-import Markdown from '../../utilities/markdown'
+import CodeArea from '../codeArea'
 import { remote, clipboard, ipcRenderer } from 'electron'
 import Notifier from '../../utilities/notifier'
 import HumanReadableTime from 'human-readable-time'
@@ -24,7 +23,7 @@ import {
   updateGistDeleteModeStatus,
   selectGistTag,
   updateFileExpandStatus,
-  updateGistTags } from '../../actions/index'
+  updateGistTags } from '../../actions'
 
 import {
   getGitHubApi,
@@ -33,28 +32,33 @@ import {
 } from '../../utilities/githubApi'
 
 import './index.scss'
-import '../../utilities/vendor/highlightJS/styles/github-gist.css'
 
 import editIcon from './ei-edit.svg'
-import shareIcon from './ei-share.svg'
+import openInWebIcon from './ei-share.svg'
 import eyeIcon from './ei-eye.svg'
 import trashIcon from './ei-trash.svg'
+import secretIcon from './lock.svg'
 import tagsIcon from './tags.svg'
 
 const conf = remote.getGlobal('conf')
 const logger = remote.getGlobal('logger')
 
 const kIsExpanded = conf.get('snippet:expanded')
+const kTabLength = conf.get('editor:tabSize')
 
 class Snippet extends Component {
-  componentWillMount () {
+  componentDidMount () {
     ipcRenderer.on('edit-gist-renderer', () => {
       this.showGistEditorModal()
+    })
+    ipcRenderer.on('exit-editor', () => {
+      this.closeGistEditorModal()
     })
   }
 
   componentWillUnmount () {
     ipcRenderer.removeAllListeners('edit-gist-renderer')
+    ipcRenderer.removeAllListeners('exit-editor')
   }
 
   showDeleteModal () {
@@ -73,7 +77,7 @@ class Snippet extends Component {
       .catch(err => {
         logger.error('Failed to delete the gist ' + activeGist)
         logger.error(JSON.stringify(err))
-        Notifier('Deletion failed', 'Please check your network condition.')
+        Notifier('Deletion failed', 'Please check your network condition. 02')
       })
       .then(data => {
         logger.info('The gist ' + activeGist + ' has been deleted.')
@@ -178,7 +182,8 @@ class Snippet extends Component {
     let filenameRecords = ''
 
     Object.keys(files).forEach(filename => {
-      filenameRecords = ',' + filename
+      // leave a space in between to help tokenization
+      filenameRecords += ', ' + filename
       const file = files[filename]
       const language = file.language || 'Other'
       newLangs.add(language)
@@ -267,7 +272,8 @@ class Snippet extends Component {
     searchIndex.updateFuseIndex({
       id: gistId,
       description: gistDetails.description,
-      language: langSearchRecords
+      language: langSearchRecords,
+      filename: filenameRecords
     })
 
     Notifier('Gist updated', HumanReadableTime(new Date()))
@@ -296,10 +302,11 @@ class Snippet extends Component {
         dialogClassName='edit-modal'
         animation={ false }
         backdrop='static'
+        keyboard={ false }
         show={ this.props.gistEditModalStatus === 'ON' }
         onHide={ this.closeGistEditorModal.bind(this)}>
         <Modal.Header closeButton>
-          <Modal.Title>Edit Gist</Modal.Title>
+          <Modal.Title>Edit</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           { this.renderGistEditorModalBody(description, fileArray, isPrivate) }
@@ -315,6 +322,12 @@ class Snippet extends Component {
       content: null,
       link: null
     })
+  }
+
+  handleCopyGistLinkClicked (snippet, file) {
+    const link = snippet.details.html_url + '#file-' + file.filename.replace(/\./g, '-').toLowerCase()
+    clipboard.writeText(link)
+    Notifier('Copied', 'The link has been copied to the clipboard.')
   }
 
   handleCopyGistFileClicked (gist) {
@@ -341,7 +354,7 @@ class Snippet extends Component {
         <Modal.Header closeButton>
           <Modal.Title>
             { gistRawModal.file }
-            <a className='copy-raw-link' href='#' onClick={ this.handleCopyRawLinkClicked.bind(this, gistRawModal.link) }>#link</a>
+            <a className='copy-raw-link' href='#' onClick={ this.handleCopyRawLinkClicked.bind(this, gistRawModal.link) }>LINK</a>
           </Modal.Title>
         </Modal.Header>
         <Modal.Body>
@@ -359,68 +372,6 @@ class Snippet extends Component {
     this.refs.rawModalText.select()
   }
 
-  //  Adapt the language name for Highlight.js. For example, 'C#' should be
-  //  expressed as 'cs' to be recognized by Highlight.js.
-  adaptedLanguage (lang) {
-    let language = lang || 'Other'
-
-    switch (language) {
-      case 'Shell': return 'Bash'
-      case 'C#': return 'cs'
-      case 'Objective-C': return 'objectivec'
-      case 'Objective-C++': return 'objectivec'
-      default:
-    }
-    return language
-  }
-
-  createMarkdownCodeBlock (content) {
-    return `<div class='markdown-section'>${Markdown.render(content)}</div>`
-  }
-
-  createHighlightedCodeBlock (content, language) {
-    let lineNumber = 0
-    const highlightedContent = HighlightJS.highlightAuto(content, [language]).value
-
-    /*
-      Highlight.js wraps comment blocks inside <span class='hljs-comment'></span>.
-      However, when the multi-line comment block is broken down into diffirent
-      table rows, only the first row, which is appended by the <span> tag, is
-      highlighted. The following code fixes it by appending <span> to each line
-      of the comment block.
-    */
-    const commentPattern = /<span class="hljs-comment">(.|\n)*?<\/span>/g
-    const adaptedHighlightedContent = highlightedContent.replace(commentPattern, data => {
-      return data.replace(/\r?\n/g, () => {
-        // Chromium is smart enough to add the closing </span>
-        return "\n<span class='hljs-comment'>"
-      })
-    })
-
-    const contentTable = adaptedHighlightedContent.split(/\r?\n/).map(lineContent => {
-      return `<tr>
-                <td class='line-number' data-pseudo-content=${++lineNumber}></td>
-                <td>${lineContent}</td>
-              </tr>`
-    }).join('')
-
-    return `<pre><code><table class='code-table'>${contentTable}</table></code></pre>`
-  }
-
-  createMarkup (content, lang) {
-    const language = this.adaptedLanguage(lang)
-    const htmlContent = language === 'Markdown'
-      ? this.createMarkdownCodeBlock(content)
-      : this.createHighlightedCodeBlock(content, language)
-
-    return { __html: htmlContent }
-  }
-
-  handleShareClicked (url) {
-    clipboard.writeText(url)
-    Notifier('Copied', 'The share link has been copied to the clipboard.')
-  }
-
   handleCopyRawLinkClicked (url) {
     clipboard.writeText(url)
     Notifier('Copied', 'The raw file link has been copied to the clipboard.')
@@ -431,7 +382,13 @@ class Snippet extends Component {
       <div className='header-table'>
         <div className='line'>
           <div className='header-title'>
-            { activeSnippet.brief.public ? 'public gist' : 'secret gist' }
+            { activeSnippet.brief.public
+              ? 'public gist'
+              : [
+                <div key='icon'className='secret-icon' dangerouslySetInnerHTML={{ __html: secretIcon }} />,
+                <span key='description' >secret gist</span>
+              ]
+            }
           </div>
           <div className='header-controls'>
             <a className='snippet-control'
@@ -441,10 +398,9 @@ class Snippet extends Component {
               <div dangerouslySetInnerHTML={{__html: editIcon}} />
             </a>
             <a className='snippet-control'
-              title='Share'
-              href='#'
-              onClick={ this.handleShareClicked.bind(this, activeSnippet.brief.html_url) }>
-              <div dangerouslySetInnerHTML={{__html: shareIcon}} />
+              title='Open in Web'
+              href={ activeSnippet.brief.html_url }>
+              <div dangerouslySetInnerHTML={{__html: openInWebIcon}} />
             </a>
             <a className='snippet-control'
               title='Revisions'
@@ -476,7 +432,11 @@ class Snippet extends Component {
     }
     htmlForDescriptionSection.push(
       <div className='description-section' key='description'
-        dangerouslySetInnerHTML={ {__html: Autolinker.link(description, { stripPrefix: false, newWindow: false })} }/>
+        dangerouslySetInnerHTML={ {__html: Autolinker.link(description, { stripPrefix: {
+          scheme: true,
+          www: true
+        },
+        newWindow: false })} }/>
     )
     htmlForDescriptionSection.push(
       <div className='custom-tags-section' key='customTags'>
@@ -506,8 +466,8 @@ class Snippet extends Component {
     const key = activeGist + '-' + filename
     if (fileExpandStatus[key] === undefined) {
       // If the file is clicked for the first time, it has no records in the
-      // fileExpandStatus list. Therefore, its value is undefined. We consider 
-      // it in the default status(either expanded or collapsed, depending on 
+      // fileExpandStatus list. Therefore, its value is undefined. We consider
+      // it in the default status(either expanded or collapsed, depending on
       // settings in .leptonrc).
       fileExpandStatus[key] = !kIsExpanded
     } else {
@@ -527,6 +487,13 @@ class Snippet extends Component {
       const fileList = activeSnippet.details.files
       for (const key in fileList) {
         const gistFile = fileList[key]
+
+        const filename = gistFile.filename
+        if (filename === '.leptonrc') gistFile.language = 'json'
+        else if (filename.endsWith('.sol') || filename.endsWith('.solidity')) {
+          gistFile.language = 'solidity'
+        }
+
         fileArray.push(Object.assign({
           filename: gistFile.filename,
           content: gistFile.content
@@ -552,28 +519,29 @@ class Snippet extends Component {
               </a>
               <div className='file-header-controls'>
                 <a
-                  href={ activeSnippet.details.html_url + '#file-' + gistFile.filename.replace(/\./g, '-') }
-                  className='file-header-control'>
-                  #link
+                  href='#'
+                  className='file-header-control'
+                  onClick={ this.handleCopyGistLinkClicked.bind(this, activeSnippet, gistFile) }>
+                  SHARE
                 </a>
                 <a
                   href='#'
                   className='file-header-control'
                   onClick={ this.showRawModalModal.bind(this, gistFile) }>
-                  #raw
+                  RAW
                 </a>
                 <a
                   href='#'
                   className='file-header-control'
                   onClick={ this.handleCopyGistFileClicked.bind(this, gistFile) }>
-                  #copy
+                  COPY
                 </a>
               </div>
             </div>
             <Collapse in={ isExpanded }>
-              <div
-                className='code-area'
-                dangerouslySetInnerHTML={ this.createMarkup(gistFile.content, gistFile.language) }/>
+              <div className='collapsable-code-area'>
+                <CodeArea content={gistFile.content} language={gistFile.language} kTabLength={kTabLength}/>
+              </div>
             </Collapse>
           </div>
         )
@@ -583,16 +551,18 @@ class Snippet extends Component {
     return (
       <div className='snippet-box'>
         <Panel className='snippet-code'
-          bsStyle={ activeSnippet.brief.public ? 'default' : 'danger' }
-          header={ this.renderPanelHeader(activeSnippet) }>
-          <div className='snippet-description'>{ this.renderSnippetDescription(activeSnippet) }</div>
-          { activeSnippet.details
-            ? null
-            : <ProgressBar className='snippet-progressbar' active now={ 100 }/> }
-          { this.renderGistEditorModal(activeSnippet.brief.description, fileArray, !activeSnippet.brief.public) }
-          { this.renderRawModal() }
-          { this.renderDeleteModal() }
-          { fileHtmlArray }
+          bsStyle={ activeSnippet.brief.public ? 'default' : 'danger' }>
+          <Panel.Heading>{ this.renderPanelHeader(activeSnippet) }</Panel.Heading>
+          <Panel.Body>
+            <div className='snippet-description'>{ this.renderSnippetDescription(activeSnippet) }</div>
+            { activeSnippet.details
+              ? null
+              : <ProgressBar className='snippet-progressbar' active now={ 100 }/> }
+            { this.renderGistEditorModal(activeSnippet.brief.description, fileArray, !activeSnippet.brief.public) }
+            { this.renderRawModal() }
+            { this.renderDeleteModal() }
+            { fileHtmlArray }
+          </Panel.Body>
         </Panel>
       </div>
     )

@@ -43,6 +43,7 @@ import {
   updateNewVersionInfo,
   updateImmersiveModeStatus,
   updateAboutModalStatus,
+  updateDashboardModalStatus,
   updatePinnedTags
 } from './actions/index'
 
@@ -127,7 +128,7 @@ function launchAuthWindow (token) {
         })
         .catch((err) => {
           logger.error('Failed: ' + JSON.stringify(err.error))
-          Notifier('Sync failed', 'Please check your network condition.')
+          Notifier('Sync failed', 'Please check your network condition. 03')
         })
     } else if (error) {
       logger.error('Oops! Something went wrong and we couldn\'t' +
@@ -136,16 +137,16 @@ function launchAuthWindow (token) {
   }
 
   // Handle the response from GitHub - See Update from 4/12/2015
-  authWindow.webContents.on('will-navigate', function (event, url) {
+  authWindow.webContents.on('will-navigate', (event, url) => {
     handleCallback(url)
   })
 
-  authWindow.webContents.on('did-get-redirect-request', function (event, oldUrl, newUrl) {
+  authWindow.webContents.on('did-get-redirect-request', (event, oldUrl, newUrl) => {
     handleCallback(newUrl)
   })
 
   // Reset the authWindow on close
-  authWindow.on('close', function () {
+  authWindow.on('close', () => {
     updateAuthWindowStatusOff()
     authWindow = null
   }, false)
@@ -277,7 +278,8 @@ function updateUserGists (userLoginId, token) {
         let filenameRecords = ''
 
         Object.keys(gist.files).forEach(filename => {
-          filenameRecords += ',' + filename
+          // leave a space in between to help tokenization
+          filenameRecords += ', ' + filename
           let file = gist.files[filename]
           let language = file.language || 'Other'
           langs.add(language)
@@ -357,7 +359,7 @@ function updateUserGists (userLoginId, token) {
       reduxStore.dispatch(updateGistSyncStatus('DONE'))
     })
     .catch(err => {
-      Notifier('Sync failed', 'Please check your network condition.')
+      Notifier('Sync failed', 'Please check your network condition. 04')
       logger.error('The request has failed: ' + err)
       reduxStore.dispatch(updateGistSyncStatus('DONE'))
       throw err
@@ -378,13 +380,19 @@ function initUserSession (token) {
       return updateUserGists(profile.login, token)
     })
     .then(() => {
-      logger.debug('-----> from updateUserGists')
+      logger.debug('-----> before updateLocalStorage')
       updateLocalStorage({
         token: token,
         profile: newProfile.login,
         image: newProfile.avatar_url
       })
+      logger.debug('-----> after updateLocalStorage')
+
+      logger.debug('-----> before syncLocalPref')
       syncLocalPref(newProfile.login)
+      logger.debug('-----> after syncLocalPref')
+
+      remote.getCurrentWindow().setTitle(`${ newProfile.login } | Lepton`) // update the app title
 
       logger.info('[Dispatch] updateUserSession ACTIVE')
       reduxStore.dispatch(updateUserSession({ activeStatus: 'ACTIVE', profile: newProfile }))
@@ -400,32 +408,37 @@ function initUserSession (token) {
         logger.info('[Dispatch] updateUserSession INACTIVE')
         reduxStore.dispatch(updateUserSession({ activeStatus: 'INACTIVE' }))
       }
-      Notifier('Sync failed', 'Please check your network condition.')
+      Notifier('Sync failed', 'Please check your network condition. 00')
     })
 }
 /** End: User session management **/
 
 /** Start: Local storage management **/
 function updateLocalStorage (data) {
-  logger.debug(`-----> Caching token ${data.token}`)
-  let rst = electronLocalStorage.set('token', data.token)
-  logger.debug(`-----> [${rst.status}] Cached token ${data.token}`)
+  try {
+    logger.debug(`-----> Caching token ${data.token}`)
+    let rst = electronLocalStorage.set('token', data.token)
+    logger.debug(`-----> [${rst.status}] Cached token ${data.token}`)
 
-  logger.debug(`-----> Caching profile ${data.profile}`)
-  rst = electronLocalStorage.set('profile', data.profile)
-  logger.debug(`-----> [${rst.status}] Cached profile ${data.profile}`)
+    logger.debug(`-----> Caching profile ${data.profile}`)
+    rst = electronLocalStorage.set('profile', data.profile)
+    logger.debug(`-----> [${rst.status}] Cached profile ${data.profile}`)
 
-  logger.debug(`-----> Caching image ${data.image}`)
-  if (!data.image) {
-    rst = electronLocalStorage.set('image', data.image)
-    logger.debug(`-----> [${rst.status}] Cached image ${data.image}`)    
-  } else {
-    downloadImage(data.image, data.profile)    
+    logger.debug(`-----> Caching image ${data.image}`)
+    downloadImage(data.image, data.profile)
+
+    logger.debug(`-----> User info is cached.`)
+  } catch (e) {
+    logger.error(`-----> Failed to cache user info. ${JSON.stringify(e)}`)
   }
 }
 
 function downloadImage (imageUrl, filename) {
-  if (!imageUrl) return
+  if (!imageUrl) {
+    logger.debug(`-----> imageUrl is null`)
+    return
+  }
+
   const userProfilePath = (remote.app).getPath('userData') + '/profile/'
   if (!fs.existsSync(userProfilePath)) {
     fs.mkdirSync(userProfilePath)
@@ -435,10 +448,14 @@ function downloadImage (imageUrl, filename) {
   ImageDownloader({
     url: imageUrl,
     dest: imagePath,
-    done: function (err, filename, image) {
-      if (err) logger.error(err)
+    done: (err, filename, image) => {
+      if (err) {
+        logger.error(err)
+        return
+      }
 
-      electronLocalStorage.set('image', imagePath)
+      const rst = electronLocalStorage.set('image', imagePath)
+      logger.debug(`-----> [${rst.status}] Cached image ${imagePath}`)
     },
   })
 }
@@ -462,9 +479,13 @@ function getCachedUserInfo () {
 }
 
 function syncLocalPref (userName) {
-  const pinnedTags = localPref && localPref.get(userName)
-    ? localPref.get(userName).pinnedTags
-    : []
+  logger.debug(`-----> Inside syncLocalPref with userName ${userName}`)
+  let pinnedTags = []
+  if (localPref && localPref.get(userName) && localPref.get(userName).pinnedTags) {
+    pinnedTags = localPref.get(userName).pinnedTags
+  }
+
+  logger.debug(`-----> pinnedTags are ${JSON.stringify(pinnedTags)}`)
   logger.info('[Dispatch] updatePinnedTags')
   reduxStore.dispatch(updatePinnedTags(pinnedTags))
 }
@@ -504,6 +525,36 @@ ipcRenderer.on('search-gist', data => {
     const preStatus = searchWindowStatus
     const newStatus = preStatus === 'ON' ? 'OFF' : 'ON'
     reduxStore.dispatch(updateSearchWindowStatus(newStatus))
+  }
+})
+
+ipcRenderer.on('dashboard', data => {
+  const state = reduxStore.getState()
+  const {
+    immersiveMode,
+    gistRawModal,
+    searchWindowStatus,
+    aboutModalStatus,
+    dashboardModalStatus,
+    gistEditModalStatus,
+    gistNewModalStatus,
+    gistDeleteModalStatus,
+    logoutModalStatus } = state
+
+  // FIXME: This should be able to extracted to the allDialogsClosed method.
+  const dialogs = [
+    aboutModalStatus,
+    immersiveMode,
+    gistRawModal.status,
+    gistEditModalStatus,
+    searchWindowStatus,
+    gistNewModalStatus,
+    gistDeleteModalStatus,
+    logoutModalStatus ]
+  if (allDialogsClosed(dialogs)) {
+    const preStatus = dashboardModalStatus
+    const newStatus = preStatus === 'ON' ? 'OFF' : 'ON'
+    reduxStore.dispatch(updateDashboardModalStatus(newStatus))
   }
 })
 
@@ -650,6 +701,7 @@ ReactDom.render(
       launchAuthWindow = { launchAuthWindow }
       reSyncUserGists = { reSyncUserGists }
       updateAboutModalStatus = { updateAboutModalStatus }
+      updateDashboardModalStatus = { updateDashboardModalStatus }
       updateActiveGistAfterClicked = { updateActiveGistAfterClicked } />
   </Provider>,
   document.getElementById('container')

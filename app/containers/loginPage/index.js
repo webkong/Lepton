@@ -4,11 +4,21 @@ import React, { Component } from 'react'
 import { connect } from 'react-redux'
 import { remote, ipcRenderer } from 'electron'
 import { Alert, Button, Image, Modal, ProgressBar } from 'react-bootstrap'
-import defaultImage from './github.jpg'
+import dojocatImage from '../../utilities/octodex/dojocat.jpg'
+import privateinvestocatImage from '../../utilities/octodex/privateinvestocat.jpg'
 
 import './index.scss'
 
+const conf = remote.getGlobal('conf')
 const logger = remote.getGlobal('logger')
+
+let defaultImage = dojocatImage
+if (conf.get('enterprise:enable')) {
+  defaultImage = privateinvestocatImage
+  if (conf.get('enterprise:avatarUrl')) {
+    defaultImage = conf.get('enterprise:avatarUrl')
+  }
+}
 
 class LoginPage extends Component {
   componentWillMount () {
@@ -16,7 +26,7 @@ class LoginPage extends Component {
     logger.debug('-----> Inside LoginPage componentWillMount with loggedInUserInfo' + JSON.stringify(loggedInUserInfo))
 
     this.setState({
-      cachedImage: loggedInUserInfo ? loggedInUserInfo.image : null,
+      cachedImage: this.resolveCachedImage(loggedInUserInfo),
     })
 
     logger.debug('-----> Registering listener for auto-login signal')
@@ -34,6 +44,11 @@ class LoginPage extends Component {
     ipcRenderer.removeAllListeners('auto-login')
   }
 
+  resolveCachedImage (info) {
+    if (info && info.image && info.image !== 'null') return info.image
+    return null
+  }
+
   handleLoginClicked () {
     if (this.props.authWindowStatus === 'OFF') {
       this.setState({
@@ -46,7 +61,14 @@ class LoginPage extends Component {
   handleContinueButtonClicked () {
     const { loggedInUserInfo } = this.props
     logger.debug('-----> Inside LoginPage handleContinueButtonClicked with loggedInUserInfo' + JSON.stringify(loggedInUserInfo))
-    const token = loggedInUserInfo ? loggedInUserInfo.token : null
+
+    let token = null
+    if (conf.get('enterprise:enable')) {
+      token = conf.get('enterprise:token')
+    } else if (loggedInUserInfo) {
+      token = loggedInUserInfo.token
+    }
+
     if (this.props.authWindowStatus === 'OFF') {
       this.props.launchAuthWindow(token)
     }
@@ -60,6 +82,20 @@ class LoginPage extends Component {
       return (
         <div className='button-group-modal'>
           <ProgressBar active now={ 100 }/>
+        </div>
+      )
+    }
+
+    if (conf.get('enterprise:enable')) {
+      return (
+        <div className='button-group-modal'>
+          <Button
+            autoFocus
+            className='modal-button'
+            bsStyle="success"
+            onClick={ this.handleContinueButtonClicked.bind(this) }>
+            { loggedInUserName ? `Continue as ${loggedInUserName}` : 'HAPPY CODING' }
+          </Button>
         </div>
       )
     }
@@ -112,7 +148,7 @@ class LoginPage extends Component {
     const loggedInUserName = loggedInUserInfo ? loggedInUserInfo.profile : null
 
     let profileImage = cachedImage || defaultImage
-    if (loggedInUserName === null || loggedInUserName === 'null') {
+    if (loggedInUserName === null || loggedInUserName === 'null' || conf.get('enterprise:enable')) {
       profileImage = defaultImage
     }
 

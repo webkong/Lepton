@@ -5,6 +5,8 @@ import { connect } from 'react-redux'
 import { Field, FieldArray, reduxForm, formValueSelector } from 'redux-form'
 import { OverlayTrigger, Tooltip, Button, ListGroup, ListGroupItem, Panel } from 'react-bootstrap'
 import GistEditor from '../gistEditor'
+import validFilename from 'valid-filename'
+import { ipcRenderer } from 'electron'
 
 import tipsIcon from './ei-question.svg'
 
@@ -28,6 +30,22 @@ class GistEditorFormImpl extends Component {
     initialData.gists && change('gistFiles', initialData.gists)
   }
 
+  componentDidMount () {
+    ipcRenderer.on('submit-gist', () => {
+      this.shortcutSubmit()
+    })
+  }
+
+  componentWillUnmount () {
+    ipcRenderer.removeAllListeners('submit-gist')
+  }
+
+  shortcutSubmit () {
+    // https://github.com/erikras/redux-form/issues/1304
+    const submitter = this.props.handleSubmit(this.props.onSubmit)
+    submitter() // submits
+  }
+
   render () {
     const { handleSubmit, handleCancel, submitting, formStyle, filenameList } = this.props
 
@@ -37,7 +55,7 @@ class GistEditorFormImpl extends Component {
           name='description'
           type='text'
           component={ renderDescriptionField }
-          validate={ required }/>
+          validate={ valideNotEmptyContent }/>
         <FieldArray
           name='gistFiles'
           formStyle={ formStyle }
@@ -65,7 +83,12 @@ class GistEditorFormImpl extends Component {
   }
 }
 
-const required = value => value ? undefined : 'required'
+const valideNotEmptyContent = value => value ? null : 'required'
+
+const validateFilename = value => {
+  if (!value) return 'required'
+  else if (!validFilename(value)) return 'invalid filename'
+}
 
 const renderTitleInputField = ({ input, placeholder, type, meta: { touched, error, warning } }) => (
   <div className='title-input-field'>
@@ -114,7 +137,7 @@ function renderGistFileHeader (member, fields, index) {
         type='text'
         component={ renderTitleInputField }
         placeholder='file name... (e.g. snippet.js)'
-        validate={ required }/>
+        validate={ validateFilename }/>
       <a href='#'
         className={ fields.length === 1 ? 'gist-editor-customized-tag-hidden' : 'gist-editor-customized-tag' }
         onClick={ () => fields.remove(index) }>#remove</a>
@@ -126,12 +149,15 @@ const renderGistFiles = ({ fields, formStyle, filenameList }) => (
   <ListGroup className='gist-editor-section'>
     { fields.map((member, index) =>
       <ListGroupItem className='gist-editor-gist-file' key={index}>
-        <Panel header={ renderGistFileHeader(member, fields, index) }>
-          <Field name={ `${member}.content` }
-            type='text'
-            filename={ filenameList && filenameList[index] }
-            component={ renderContentField }
-            validate={ required }/>
+        <Panel>
+          <Panel.Heading>{ renderGistFileHeader(member, fields, index) }</Panel.Heading>
+          <Panel.Body>
+            <Field name={ `${member}.content` }
+              type='text'
+              filename={ filenameList && filenameList[index] }
+              component={ renderContentField }
+              validate={ valideNotEmptyContent }/>
+          </Panel.Body>
         </Panel>
       </ListGroupItem>
     ) }

@@ -28,6 +28,8 @@ import {
   CREATE_SINGLE_GIST
 } from '../../utilities/githubApi'
 
+import dojocatImage from '../../utilities/octodex/dojocat.jpg'
+import privateinvestocatImage from '../../utilities/octodex/privateinvestocat.jpg'
 import logoutIcon from './logout.svg'
 import newIcon from './new.svg'
 import syncIcon from './sync.svg'
@@ -36,12 +38,27 @@ import { remote, ipcRenderer } from 'electron'
 const conf = remote.getGlobal('conf')
 const logger = remote.getGlobal('logger')
 
+let defaultImage = dojocatImage
+if (conf.get('enterprise:enable')) {
+  defaultImage = privateinvestocatImage
+  if (conf.get('enterprise:avatarUrl')) {
+    defaultImage = conf.get('enterprise:avatarUrl')
+  }
+}
+
 const kIsPrivate = conf.get('snippet:newSnippetPrivate')
+const hideProfilePhoto = conf.get('userPanel:hideProfilePhoto')
 
 class UserPanel extends Component {
-  componentWillMount () {
+  componentDidMount () {
     ipcRenderer.on('new-gist-renderer', () => {
       this.handleNewGistClicked()
+    })
+    ipcRenderer.on('exit-editor', () => {
+      this.closeGistEditorModal()
+    })
+    ipcRenderer.on('sync-gists', () => {
+      this.handleSyncClicked()
     })
   }
 
@@ -91,7 +108,8 @@ class UserPanel extends Component {
 
     gistTags[Prefixed('All')].unshift(gistId)
     Object.keys(files).forEach(filename => {
-      filenameRecords = ',' + filename
+      // leave a space in between to help tokenization
+      filenameRecords += ', ' + filename
       const language = files[filename].language || 'Other'
       langs.add(language)
       const prefixedLang = Prefixed(language)
@@ -171,10 +189,11 @@ class UserPanel extends Component {
         dialogClassName='new-modal'
         animation={ false }
         backdrop='static'
+        keyboard={ false }
         show={ this.props.gistNewModalStatus === 'ON' }
         onHide={ this.closeGistEditorModal.bind(this)}>
         <Modal.Header closeButton>
-          <Modal.Title>New Gist</Modal.Title>
+          <Modal.Title>New</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           { this.renderGistEditorModalBody.bind(this)() }
@@ -248,12 +267,18 @@ class UserPanel extends Component {
       image: null
     })
     removeAccessToken()
+    remote.getCurrentWindow().setTitle('Lepton') // update the app title
   }
 
   renderProfile () {
     const { profile, activeStatus } = this.props.userSession
-    if (!profile || activeStatus === 'INACTIVE') {
+    if (hideProfilePhoto || !profile || activeStatus === 'INACTIVE') {
       return
+    }
+
+    let avatarUrl = profile.avatar_url
+    if (conf.get('enterprise:enable')) {
+      avatarUrl = defaultImage
     }
 
     return (
@@ -261,7 +286,7 @@ class UserPanel extends Component {
         <figure className="sticker-img">
           <Image
             className='profile-image-section'
-            src={ profile.avatar_url }/>
+            src={ avatarUrl }/>
           <div>
             <div className='profile-username-section'>
               <h5><span>{ this.props.userSession.profile.login }</span></h5>
